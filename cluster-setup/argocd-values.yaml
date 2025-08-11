@@ -26,34 +26,47 @@ server:
 
 repoServer:
   # Custom Helm version configuration
-  extraInitContainers:
-    - name: install-helm
-      image: alpine:3.18
-      command:
-        - sh
-        - -c
-        - |
-          wget -O /helm.tar.gz https://get.helm.sh/helm-v3.12.3-linux-amd64.tar.gz
-          tar -xzf /helm.tar.gz
-          cp linux-amd64/helm /shared/helm
-          chmod +x /shared/helm
-          /shared/helm version
-      volumeMounts:
-        - name: helm-volume
-          mountPath: /shared
-  
-  extraVolumeMounts:
-    - name: helm-volume
-      mountPath: /usr/local/bin/helm
-      subPath: helm
-  
-  extraVolumes:
-    - name: helm-volume
+  volumes:
+    - name: helm-working-dir
       emptyDir: {}
   
+  volumeMounts:
+    - name: helm-working-dir
+      mountPath: /helm-working-dir
+  
   env:
+    - name: HELM_CACHE_HOME
+      value: /helm-working-dir
+    - name: HELM_CONFIG_HOME
+      value: /helm-working-dir
+    - name: HELM_DATA_HOME
+      value: /helm-working-dir
     - name: HELM_VERSION
       value: "v3.12.3"
+  
+  initContainers:
+    - name: install-helm
+      image: alpine:3.18
+      volumeMounts:
+        - name: helm-working-dir
+          mountPath: /helm-working-dir
+      env:
+        - name: HELM_CACHE_HOME
+          value: /helm-working-dir
+        - name: HELM_CONFIG_HOME
+          value: /helm-working-dir
+        - name: HELM_DATA_HOME
+          value: /helm-working-dir
+      command: [ "/bin/sh", "-c" ]
+      args:
+        - |
+          apk --no-cache add curl;
+          wget -O /helm.tar.gz https://get.helm.sh/helm-v3.12.3-linux-amd64.tar.gz;
+          tar -xzf /helm.tar.gz;
+          cp linux-amd64/helm /usr/local/bin/helm;
+          chmod +x /usr/local/bin/helm;
+          chmod -R 777 /helm-working-dir;
+          /usr/local/bin/helm version;
 
 configs:
   cm:
