@@ -83,29 +83,7 @@ install_argocd() {
     # Install Argo CD via Helm with custom Helm version
     helm install argocd argo/argo-cd \
         --namespace argocd \
-        --set metrics.enabled=true \
-        --set admin.enabled=true \
-        --set applicationSet.enabled=true \
-        --set resourceTrackingMethod=annotation \
-        --set rbac.enabled=true \
-        --set notifications.enabled=true \
-        --set audit.enabled=true \
-        --set server.insecure=false \
-        --set server.disable.auth=false \
-        --set repoServer.extraInitContainers[0].name=install-helm \
-        --set repoServer.extraInitContainers[0].image=alpine:3.18 \
-        --set repoServer.extraInitContainers[0].command[0]=sh \
-        --set repoServer.extraInitContainers[0].command[1]=-c \
-        --set repoServer.extraInitContainers[0].command[2]="wget -O /helm.tar.gz https://get.helm.sh/helm-v3.12.3-linux-amd64.tar.gz && tar -xzf /helm.tar.gz && cp linux-amd64/helm /shared/helm && chmod +x /shared/helm && /shared/helm version" \
-        --set repoServer.extraInitContainers[0].volumeMounts[0].name=helm-volume \
-        --set repoServer.extraInitContainers[0].volumeMounts[0].mountPath=/shared \
-        --set repoServer.extraVolumeMounts[0].name=helm-volume \
-        --set repoServer.extraVolumeMounts[0].mountPath=/usr/local/bin/helm \
-        --set repoServer.extraVolumeMounts[0].subPath=helm \
-        --set repoServer.extraVolumes[0].name=helm-volume \
-        --set repoServer.extraVolumes[0].emptyDir={} \
-        --set repoServer.env[0].name=HELM_VERSION \
-        --set repoServer.env[0].value=v3.12.3 \
+        --values cluster-setup/argocd-values.yaml \
         --wait \
         --timeout 10m
     
@@ -113,7 +91,10 @@ install_argocd() {
     print_status "Waiting for Argo CD to be ready..."
     kubectl wait --for=condition=Available deployment/argocd-server -n argocd --timeout=300s
     kubectl wait --for=condition=Available deployment/argocd-repo-server -n argocd --timeout=300s
-    kubectl wait --for=condition=Available statefulset/argocd-application-controller -n argocd --timeout=300s
+    
+    # Wait for statefulset to be ready (using a different approach)
+    print_status "Waiting for Argo CD application controller..."
+    kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=argocd-application-controller -n argocd --timeout=300s
     
     print_success "Argo CD installed and ready"
 }

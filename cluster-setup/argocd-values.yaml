@@ -1,0 +1,92 @@
+# Argo CD Helm values with custom Helm version
+metrics:
+  enabled: true
+
+admin:
+  enabled: true
+
+applicationSet:
+  enabled: true
+
+resourceTrackingMethod: annotation
+
+rbac:
+  enabled: true
+
+notifications:
+  enabled: true
+
+audit:
+  enabled: true
+
+server:
+  insecure: false
+  disable:
+    auth: false
+
+repoServer:
+  # Custom Helm version configuration
+  extraInitContainers:
+    - name: install-helm
+      image: alpine:3.18
+      command:
+        - sh
+        - -c
+        - |
+          wget -O /helm.tar.gz https://get.helm.sh/helm-v3.12.3-linux-amd64.tar.gz
+          tar -xzf /helm.tar.gz
+          cp linux-amd64/helm /shared/helm
+          chmod +x /shared/helm
+          /shared/helm version
+      volumeMounts:
+        - name: helm-volume
+          mountPath: /shared
+  
+  extraVolumeMounts:
+    - name: helm-volume
+      mountPath: /usr/local/bin/helm
+      subPath: helm
+  
+  extraVolumes:
+    - name: helm-volume
+      emptyDir: {}
+  
+  env:
+    - name: HELM_VERSION
+      value: "v3.12.3"
+
+configs:
+  cm:
+    # Enable metrics
+    metrics.enabled: "true"
+    
+    # Configure admin user
+    admin.enabled: "true"
+    
+    # Enable application set controller
+    applicationSet.enabled: "true"
+    
+    # Configure resource tracking
+    resourceTrackingMethod: annotation
+    
+    # Enable RBAC
+    rbac.enabled: "true"
+    
+    # Configure notifications
+    notifications.enabled: "true"
+    
+    # Configure audit logging
+    audit.enabled: "true"
+    
+    # Configure server settings
+    server.insecure: "false"
+    server.disable.auth: "false"
+    
+    # Configure repositories
+    repositories: |
+      - type: git
+        url: https://github.com/csz-devops/kind-argosy.git
+        name: kind-argosy
+      - type: helm
+        url: https://prometheus-community.github.io/helm-charts
+        name: prometheus-community
