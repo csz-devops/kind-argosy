@@ -103,48 +103,7 @@ install_argocd() {
 }
 
 # Override Helm version in Argo CD repo server
-override_helm_version() {
-    print_status "Overriding Helm version to v3.12.3..."
-    
-    # Patch the repo server deployment to use custom Helm version
-    kubectl patch deployment argocd-repo-server -n argocd --type='json' -p='[
-        {
-            "op": "add",
-            "path": "/spec/template/spec/initContainers/-",
-            "value": {
-                "name": "install-helm",
-                "image": "alpine:3.18",
-                "command": ["sh", "-c", "wget -O /helm.tar.gz https://get.helm.sh/helm-v3.12.3-linux-amd64.tar.gz && tar -xzf /helm.tar.gz && cp linux-amd64/helm /shared/helm && chmod +x /shared/helm && /shared/helm version"],
-                "volumeMounts": [{"name": "helm-volume", "mountPath": "/shared"}]
-            }
-        },
-        {
-            "op": "add",
-            "path": "/spec/template/spec/containers/0/volumeMounts/-",
-            "value": {
-                "name": "helm-volume",
-                "mountPath": "/usr/local/bin/helm",
-                "subPath": "helm"
-            }
-        },
-        {
-            "op": "add",
-            "path": "/spec/template/spec/volumes/-",
-            "value": {
-                "name": "helm-volume",
-                "emptyDir": {}
-            }
-        }
-    ]'
-    
-    # Wait for the new pod to be ready
-    print_status "Waiting for repo server with custom Helm version..."
-    kubectl wait --for=condition=Available deployment/argocd-repo-server -n argocd --timeout=300s
-    
-    # Verify the Helm version
-    HELM_VERSION=$(kubectl exec -n argocd deployment/argocd-repo-server -- helm version --short 2>/dev/null | head -1 || echo "unknown")
-    print_success "Helm version in repo server: $HELM_VERSION"
-}
+
 
 # Get Argo CD admin password
 get_admin_password() {
