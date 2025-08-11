@@ -69,6 +69,8 @@ wait_for_cluster() {
     print_success "Cluster is ready"
 }
 
+
+
 # Install Argo CD
 install_argocd() {
     print_status "Installing Argo CD..."
@@ -80,7 +82,8 @@ install_argocd() {
     helm repo add argo https://argoproj.github.io/argo-helm
     helm repo update
     
-    # Install Argo CD via Helm with custom Helm version
+    # Install Argo CD with custom Helm v3.12.3
+    print_status "Installing Argo CD with custom Helm v3.12.3..."
     helm install argocd argo/argo-cd \
         --namespace argocd \
         --values cluster-setup/argocd-values.yaml \
