@@ -147,9 +147,7 @@ override_helm_version() {
 get_admin_password() {
     print_status "Getting Argo CD admin password..."
     
-    # Wait for the secret to be created
-    kubectl wait --for=condition=Available secret/argocd-initial-admin-secret -n argocd --timeout=60s
-    
+    # Get the password directly (no need to wait for secret)
     ADMIN_PASSWORD=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d)
     
     echo
