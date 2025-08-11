@@ -8,7 +8,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: file:///Users/cszumilo/personal/csz-devops/kind-argosy
+    repoURL: file:///Users/cszumilo/personal/csz-devops/kind-argosy/.git
     targetRevision: HEAD
     path: gitops
   destination:
