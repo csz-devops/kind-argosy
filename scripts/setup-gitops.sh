@@ -1,0 +1,193 @@
+#!/bin/bash
+
+set -e
+
+echo "🚀 Setting up Kind cluster with Argo CD GitOps..."
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Function to print colored output
+print_status() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+print_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
+
+print_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+}
+
+print_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# Check prerequisites
+check_prerequisites() {
+    print_status "Checking prerequisites..."
+    
+    if ! command -v kind &> /dev/null; then
+        print_error "kind is not installed. Please install kind first."
+        exit 1
+    fi
+    
+    if ! command -v kubectl &> /dev/null; then
+        print_error "kubectl is not installed. Please install kubectl first."
+        exit 1
+    fi
+    
+    if ! command -v helm &> /dev/null; then
+        print_warning "helm is not installed. It will be installed in the Argo CD container."
+    fi
+    
+    print_success "Prerequisites check passed"
+}
+
+# Create Kind cluster
+create_cluster() {
+    print_status "Creating Kind cluster..."
+    
+    if kind get clusters | grep -q "argosy-cluster"; then
+        print_warning "Cluster 'argosy-cluster' already exists. Deleting it..."
+        kind delete cluster --name argosy-cluster
+    fi
+    
+    kind create cluster --name argosy-cluster --config cluster-setup/kind-config.yaml
+    print_success "Kind cluster created"
+}
+
+# Wait for cluster to be ready
+wait_for_cluster() {
+    print_status "Waiting for cluster to be ready..."
+    kubectl wait --for=condition=Ready nodes --all --timeout=300s
+    print_success "Cluster is ready"
+}
+
+# Install Argo CD
+install_argocd() {
+    print_status "Installing Argo CD..."
+    
+    # Create namespace
+    kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+    
+    # Install Argo CD
+    kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+    
+    # Wait for Argo CD to be ready
+    print_status "Waiting for Argo CD to be ready..."
+    kubectl wait --for=condition=Available deployment/argocd-server -n argocd --timeout=300s
+    kubectl wait --for=condition=Available deployment/argocd-repo-server -n argocd --timeout=300s
+    kubectl wait --for=condition=Available deployment/argocd-application-controller -n argocd --timeout=300s
+    
+    print_success "Argo CD installed and ready"
+}
+
+# Get Argo CD admin password
+get_admin_password() {
+    print_status "Getting Argo CD admin password..."
+    
+    # Wait for the secret to be created
+    kubectl wait --for=condition=Available secret/argocd-initial-admin-secret -n argocd --timeout=60s
+    
+    ADMIN_PASSWORD=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d)
+    
+    echo
+    print_success "Argo CD admin credentials:"
+    echo "   Username: admin"
+    echo "   Password: $ADMIN_PASSWORD"
+    echo
+}
+
+# Apply GitOps configuration
+apply_gitops() {
+    print_status "Applying GitOps configuration..."
+    
+    # Apply the root application that will manage everything
+    kubectl apply -f gitops/apps/root-app.yaml
+    
+    # Wait for the root app to be synced
+    print_status "Waiting for root application to sync..."
+    kubectl wait --for=condition=Available application/root-app -n argocd --timeout=300s
+    
+    print_success "GitOps configuration applied"
+}
+
+# Setup Argo CD access
+setup_argocd_access() {
+    print_status "Setting up Argo CD access..."
+    
+    print_success "Argo CD UI available at: https://localhost:8080"
+    print_warning "To access Argo CD, run: kubectl port-forward svc/argocd-server -n argocd 8080:443"
+}
+
+# Verify setup
+verify_setup() {
+    print_status "Verifying setup..."
+    
+    # Check Argo CD applications
+    echo
+    print_status "Argo CD Applications:"
+    kubectl get applications -n argocd
+    
+    # Check Argo CD pods
+    echo
+    print_status "Argo CD Pods:"
+    kubectl get pods -n argocd
+    
+    # Check if root app is synced
+    ROOT_APP_STATUS=$(kubectl get application root-app -n argocd -o jsonpath='{.status.sync.status}')
+    if [ "$ROOT_APP_STATUS" = "Synced" ]; then
+        print_success "Root application is synced"
+    else
+        print_warning "Root application status: $ROOT_APP_STATUS"
+    fi
+    
+    print_success "Setup verification complete"
+}
+
+# Main execution
+main() {
+    echo "🎯 Argo CD GitOps Setup Script"
+    echo "================================"
+    echo
+    
+    check_prerequisites
+    create_cluster
+    wait_for_cluster
+    install_argocd
+    get_admin_password
+    apply_gitops
+    setup_argocd_access
+    verify_setup
+    
+    echo
+    echo "🎉 Setup complete!"
+    echo "=================="
+    echo
+    echo "📋 Next steps:"
+    echo "   1. Access Argo CD UI: kubectl port-forward svc/argocd-server -n argocd 8080:443"
+    echo "   2. Login with admin / $ADMIN_PASSWORD"
+    echo "   3. Check the 'root-app' application"
+    echo "   4. Monitor the sync status of all applications"
+    echo
+    echo "🔧 Features enabled:"
+    echo "   ✅ Argo CD self-management"
+    echo "   ✅ Custom Helm version (3.12.3)"
+    echo "   ✅ Prometheus monitoring with dashboards"
+    echo "   ✅ Comprehensive alerts"
+    echo
+    echo "📊 Monitoring (NodePort access):"
+    echo "   - Prometheus: http://localhost:30000"
+    echo "   - Grafana: http://localhost:31000 (admin/admin123)"
+    echo "   - AlertManager: http://localhost:32000"
+    echo
+}
+
+# Run main function
+main "$@"
