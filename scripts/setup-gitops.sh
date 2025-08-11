@@ -82,7 +82,7 @@ install_argocd() {
     helm repo add argo https://argoproj.github.io/argo-helm
     helm repo update
     
-    # Install Argo CD with custom Helm v3.12.3
+    # Install Argo CD with custom Helm v3.12.3 using official custom tooling
     print_status "Installing Argo CD with custom Helm v3.12.3..."
     helm install argocd argo/argo-cd \
         --namespace argocd \
@@ -100,6 +100,12 @@ install_argocd() {
     kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=argocd-application-controller -n argocd --timeout=300s
     
     print_success "Argo CD installed and ready"
+    
+    # Verify the Helm version
+    print_status "Verifying Helm version..."
+    sleep 10  # Give the init container time to complete
+    HELM_VERSION=$(kubectl exec -n argocd deployment/argocd-repo-server -- helm version --short 2>/dev/null | head -1 || echo "unknown")
+    print_success "Helm version in repo server: $HELM_VERSION"
 }
 
 # Override Helm version in Argo CD repo server
