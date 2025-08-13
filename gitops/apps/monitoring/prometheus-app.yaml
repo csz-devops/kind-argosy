@@ -9,6 +9,7 @@ metadata:
     link.argocd.argoproj.io/external-link-prometheus: http://localhost:30000
     link.argocd.argoproj.io/external-link-grafana: http://localhost:31000
     link.argocd.argoproj.io/external-link-alertmanager: http://localhost:32000
+    argocd.argoproj.io/sync-wave: "1"
 spec:
   destination:
     namespace: monitoring

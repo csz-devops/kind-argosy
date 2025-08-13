@@ -8,3 +8,8 @@ resources:
 - monitoring/argocd-alerts.yaml
 
 namespace: argocd
+
+# Sync waves to ensure proper ordering
+# Wave 0: Argo CD app (self-management)
+# Wave 1: Prometheus stack (installs CRDs)
+# Wave 2: ServiceMonitors and PrometheusRules (require CRDs)

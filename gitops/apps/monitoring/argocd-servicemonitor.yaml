@@ -4,6 +4,8 @@ metadata:
   name: argocd-server-metrics
   labels:
     release: kube-prometheus-stack
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
 spec:
   selector:
     matchLabels:
@@ -17,6 +19,8 @@ metadata:
   name: argocd-repo-server-metrics
   labels:
     release: kube-prometheus-stack
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
 spec:
   selector:
     matchLabels:
@@ -30,6 +34,8 @@ metadata:
   name: argocd-metrics
   labels:
     release: kube-prometheus-stack
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
 spec:
   selector:
     matchLabels:
