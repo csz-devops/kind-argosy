@@ -11,10 +11,7 @@ spec:
     repoURL: https://github.com/csz-devops/kind-argosy.git
     targetRevision: HEAD
     path: gitops/apps/monitoring
-    kustomize:
-      images:
-        - name: prometheus-operator
-          newTag: v0.68.0
+
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd
