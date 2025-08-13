@@ -22,7 +22,7 @@ This setup fulfills all three core requirements:
 
 ```bash
 # Clone the repository
-git clone <your-repo-url>
+git clone https://github.com/csz-devops/kind-argosy.git
 cd kind-argosy
 
 # Run the setup script
@@ -34,19 +34,22 @@ cd kind-argosy
 ```
 kind-argosy/
 ├── cluster-setup/
-│   ├── kind-config.yaml          # Kind cluster configuration
+    ├── bootstrap.sh                        # Script to set up Kind and Argo CD for adhoc testing
+│   ├── kind-config.yaml                    # Kind cluster configuration
 ├── gitops/
-│   ├── kustomization.yaml        # Kustomize configuration
-│   └── apps/
-│       ├── root-app.yaml         # Root application (bootstrap)
-│       ├── argocd/
-│       │   └── argocd-app.yaml   # Argo CD application with custom Helm
-│       └── monitoring/
-│           ├── prometheus-app.yaml    # Prometheus stack
-│           ├── argocd-servicemonitor.yaml # Service monitors
-│           └── argocd-alerts.yaml     # Alert rules
+└── apps/
+│   ├── kustomization.yaml                  # Main kustomize (root-app, argocd-app, prometheus-app, monitoring-resources-app)
+│   ├── root-app.yaml                       # Bootstrap application
+│   ├── argocd/
+│   │   └── argocd-app.yaml                 # Argo CD self-management
+│   └── monitoring/
+│       ├── prometheus-app.yaml             # Prometheus stack
+│       ├── monitoring-resources-app.yaml   # ServiceMonitors/PrometheusRules
+│       ├── kustomization.yaml              # Monitoring resources kustomize
+│       ├── argocd-servicemonitor.yaml
+│       └── argocd-alerts.yaml
 └── scripts/
-    └── setup-gitops.sh           # Complete setup script
+    └── setup-gitops.sh                     # Complete setup script
 ```
 
 ## Key Features
@@ -54,6 +57,21 @@ kind-argosy/
 ### 1. Argo CD Self-Management
 
 The `root-app.yaml` creates a bootstrap application that manages all other applications through GitOps.
+
+#### Application Architecture
+
+The setup uses a hierarchical application structure for proper dependency management:
+
+1. **root-app** (bootstrap) → Creates:
+   - **argocd-app** (self-management with custom Helm)
+   - **kube-prometheus-stack** (installs CRDs)
+   - **monitoring-resources-app** (creates ServiceMonitors/PrometheusRules)
+
+2. **monitoring-resources-app** → Creates:
+   - ServiceMonitors (after Prometheus is ready)
+   - PrometheusRules (after Prometheus is ready)
+
+This ensures that ServiceMonitors and PrometheusRules are only applied after the Prometheus stack (and its CRDs) are fully deployed and ready.
 
 ### 2. Custom Helm Version (3.12.3)
 
@@ -152,6 +170,10 @@ kubectl exec -n argocd deployment/argocd-repo-server -- helm version
 
 # Check monitoring
 kubectl get pods -n monitoring
+
+# Check monitoring resources
+kubectl get servicemonitors -n argocd
+kubectl get prometheusrules -n monitoring
 ```
 
 ## Customization
