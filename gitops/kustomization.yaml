@@ -6,6 +6,5 @@ resources:
 - apps/monitoring/prometheus-app.yaml
 - apps/monitoring/argocd-servicemonitor.yaml
 - apps/monitoring/argocd-alerts.yaml
-- root-app.yaml
 
 namespace: argocd

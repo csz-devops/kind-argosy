@@ -10,7 +10,7 @@ spec:
   source:
     repoURL: https://github.com/csz-devops/kind-argosy.git
     targetRevision: HEAD
-    path: gitops
+    path: gitops/apps
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd

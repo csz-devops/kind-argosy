@@ -109,8 +109,22 @@ apply_gitops() {
     
     kubectl apply -f gitops/apps/root-app.yaml
     
-    # print_status "Waiting for root application to sync..."
-    # kubectl wait --for=condition=Available application/root-app -n argocd --timeout=300s
+    print_status "Waiting for root application to sync..."
+    timeout=300
+    while [ $timeout -gt 0 ]; do
+        SYNC_STATUS=$(kubectl get application root-app -n argocd -o jsonpath='{.status.sync.status}' 2>/dev/null || echo "Unknown")
+        if [ "$SYNC_STATUS" = "Synced" ]; then
+            print_success "Root application synced successfully"
+            break
+        fi
+        print_status "Waiting for root application to sync... Status: $SYNC_STATUS ($timeout seconds remaining)"
+        sleep 10
+        timeout=$((timeout - 10))
+    done
+    
+    if [ $timeout -le 0 ]; then
+        print_warning "Root application sync timeout, continuing anyway..."
+    fi
     
     print_success "GitOps configuration applied"
 }
@@ -137,22 +151,37 @@ setup_port_forwarding() {
     
     # Wait for GitOps to sync monitoring applications
     print_status "Waiting for GitOps to sync monitoring applications..."
-    timeout=600
+    timeout=300
     while [ $timeout -gt 0 ]; do
-        if kubectl get namespace monitoring &> /dev/null && \
-           kubectl get deployment kube-prometheus-stack-prometheus -n monitoring &> /dev/null && \
-           kubectl get deployment kube-prometheus-stack-grafana -n monitoring &> /dev/null && \
-           kubectl get deployment kube-prometheus-stack-alertmanager -n monitoring &> /dev/null; then
-            print_success "Monitoring applications synced by GitOps"
+        if kubectl get namespace monitoring &> /dev/null; then
+            print_success "Monitoring namespace created by GitOps"
             break
         fi
-        print_status "Waiting for GitOps to sync monitoring... ($timeout seconds remaining)"
-        sleep 30
-        timeout=$((timeout - 30))
+        print_status "Waiting for monitoring namespace... ($timeout seconds remaining)"
+        sleep 10
+        timeout=$((timeout - 10))
     done
     
     if [ $timeout -le 0 ]; then
-        print_warning "GitOps sync timeout, port forwarding may fail"
+        print_warning "Monitoring namespace not created, port forwarding may fail"
+        return
+    fi
+    
+    # Wait for at least one monitoring deployment to appear
+    print_status "Waiting for monitoring deployments to appear..."
+    timeout=180
+    while [ $timeout -gt 0 ]; do
+        if kubectl get deployment -n monitoring 2>/dev/null | grep -q "kube-prometheus-stack"; then
+            print_success "Monitoring deployments found"
+            break
+        fi
+        print_status "Waiting for monitoring deployments... ($timeout seconds remaining)"
+        sleep 10
+        timeout=$((timeout - 10))
+    done
+    
+    if [ $timeout -le 0 ]; then
+        print_warning "Monitoring deployments not found, port forwarding may fail"
     fi
     
     # Wait for monitoring services to be ready
@@ -214,13 +243,6 @@ verify_setup() {
         print_warning "Root application status: $ROOT_APP_STATUS"
     fi
     
-    # Ensure monitoring script is executable
-    if [ -f "scripts/monitoring-port-forwarding.sh" ]; then
-        chmod +x scripts/monitoring-port-forwarding.sh
-        print_success "Monitoring port-forwarding script is ready"
-    else
-        print_warning "Monitoring port-forwarding script not found"
-    fi
     
     print_success "Setup verification complete"
 }
