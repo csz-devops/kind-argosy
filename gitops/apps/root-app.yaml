@@ -8,9 +8,11 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: file:///Users/cszumilo/personal/csz-devops/kind-argosy/.git
+    repoURL: https://github.com/csz-devops/kind-argosy.git
     targetRevision: HEAD
     path: gitops
+    # For local development, we'll use a local Git repository
+    # This requires the repository to be committed and pushed to GitHub
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd
