@@ -1,0 +1,37 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: argocd-alerts
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+  - name: argocd
+    rules:
+    - alert: ArgoCDServerDown
+      expr: absent(up{job="argocd-server-metrics"})
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Argo CD server is down"
+        description: "Argo CD server has been down for more than 1 minute"
+    
+    - alert: ArgoCDRepoServerDown
+      expr: absent(up{job="argocd-repo-server"})
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Argo CD repo server is down"
+        description: "Argo CD repo server has been down for more than 1 minute"
+    
+    - alert: ArgoCDApplicationControllerDown
+      expr: absent(up{job="argocd-metrics"})
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Argo CD application controller is down"
+        description: "Argo CD application controller has been down for more than 1 minute"

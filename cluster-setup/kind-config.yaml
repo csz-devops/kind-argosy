@@ -1,0 +1,20 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: argosy-cluster
+nodes:
+- role: control-plane
+  extraPortMappings:
+  - containerPort: 8080
+    hostPort: 8080
+    protocol: TCP
+  - containerPort: 30000
+    hostPort: 30000
+    protocol: TCP
+  - containerPort: 31000
+    hostPort: 31000
+    protocol: TCP
+  - containerPort: 32000
+    hostPort: 32000
+    protocol: TCP
+- role: worker
+- role: worker
