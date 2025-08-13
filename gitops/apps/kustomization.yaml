@@ -4,8 +4,7 @@ kind: Kustomization
 resources:
 - argocd/argocd-app.yaml
 - monitoring/prometheus-app.yaml
-- monitoring/argocd-servicemonitor.yaml
-- monitoring/argocd-alerts.yaml
+- monitoring/monitoring-resources-app.yaml
 
 namespace: argocd
 
