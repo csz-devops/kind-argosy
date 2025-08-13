@@ -115,69 +115,7 @@ apply_gitops() {
     print_success "GitOps configuration applied"
 }
 
-# Apply monitoring resources directly for testing
-apply_monitoring_direct() {
-    print_status "Applying monitoring resources directly for testing..."
-    
-    # Create monitoring namespace
-    kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
-    
-    # Apply Prometheus application first
-    print_status "Applying Prometheus stack..."
-    kubectl apply -f gitops/apps/monitoring/prometheus-app.yaml
-    
-    # Wait for Argo CD to sync the application
-    print_status "Waiting for Argo CD to sync Prometheus application..."
-    timeout=300
-    while [ $timeout -gt 0 ]; do
-        SYNC_STATUS=$(kubectl get application kube-prometheus-stack -n argocd -o jsonpath='{.status.sync.status}' 2>/dev/null || echo "Unknown")
-        if [ "$SYNC_STATUS" = "Synced" ]; then
-            print_success "Prometheus application synced successfully"
-            break
-        fi
-        print_status "Waiting for Prometheus application to sync... Status: $SYNC_STATUS ($timeout seconds remaining)"
-        sleep 10
-        timeout=$((timeout - 10))
-    done
-    
-    if [ $timeout -le 0 ]; then
-        print_warning "Prometheus application sync timeout, continuing anyway..."
-    fi
-    
-    # Wait for Prometheus Operator to be ready (this installs the CRDs)
-    print_status "Waiting for Prometheus Operator to be ready..."
-    timeout=300
-    while [ $timeout -gt 0 ]; do
-        if kubectl get deployment kube-prometheus-stack-operator -n monitoring &> /dev/null; then
-            print_success "Prometheus Operator deployment found"
-            break
-        fi
-        print_status "Waiting for Prometheus Operator deployment to appear... ($timeout seconds remaining)"
-        sleep 10
-        timeout=$((timeout - 10))
-    done
-    
-    if [ $timeout -le 0 ]; then
-        print_warning "Prometheus Operator deployment not found within timeout"
-        return
-    fi
-    
-    # Now wait for the deployment to be ready
-    kubectl wait --for=condition=Available deployment/kube-prometheus-stack-operator -n monitoring --timeout=300s
-    
-    # Wait a bit more for CRDs to be fully registered
-    sleep 10
-    
-    # Now apply ServiceMonitors (after CRDs are available)
-    print_status "Applying ServiceMonitors..."
-    kubectl apply -f gitops/apps/monitoring/argocd-servicemonitor.yaml
-    
-    # Apply AlertRules
-    print_status "Applying AlertRules..."
-    kubectl apply -f gitops/apps/monitoring/argocd-alerts.yaml
-    
-    print_success "Monitoring resources applied directly"
-}
+
 
 # Setup port forwarding for all services
 setup_port_forwarding() {
@@ -197,13 +135,24 @@ setup_port_forwarding() {
     
     print_success "Argo CD UI: https://localhost:8080"
     
-    # Wait for monitoring namespace to be created (should be immediate since we applied directly)
-    print_status "Checking monitoring namespace..."
-    if kubectl get namespace monitoring &> /dev/null; then
-        print_success "Monitoring namespace exists"
-    else
-        print_warning "Monitoring namespace not found"
-        return
+    # Wait for GitOps to sync monitoring applications
+    print_status "Waiting for GitOps to sync monitoring applications..."
+    timeout=600
+    while [ $timeout -gt 0 ]; do
+        if kubectl get namespace monitoring &> /dev/null && \
+           kubectl get deployment kube-prometheus-stack-prometheus -n monitoring &> /dev/null && \
+           kubectl get deployment kube-prometheus-stack-grafana -n monitoring &> /dev/null && \
+           kubectl get deployment kube-prometheus-stack-alertmanager -n monitoring &> /dev/null; then
+            print_success "Monitoring applications synced by GitOps"
+            break
+        fi
+        print_status "Waiting for GitOps to sync monitoring... ($timeout seconds remaining)"
+        sleep 30
+        timeout=$((timeout - 30))
+    done
+    
+    if [ $timeout -le 0 ]; then
+        print_warning "GitOps sync timeout, port forwarding may fail"
     fi
     
     # Wait for monitoring services to be ready
@@ -288,7 +237,6 @@ main() {
     install_argocd
     get_admin_password
     apply_gitops
-    apply_monitoring_direct
     verify_setup
     setup_port_forwarding
     
