@@ -13,42 +13,8 @@ spec:
     targetRevision: 8.2.7
     helm:
       values: |
-        # Enable metrics for monitoring
-        metrics:
-          enabled: true
-        
-        # Configure admin user
-        admin:
-          enabled: true
-        
-        # Enable application set controller
-        applicationSet:
-          enabled: true
-        
-        # Configure resource tracking
-        resourceTrackingMethod: annotation
-        
-        # Enable RBAC
-        rbac:
-          enabled: true
-        
-        # Configure notifications
-        notifications:
-          enabled: true
-        
-        # Enable audit logging
-        audit:
-          enabled: true
-        
-        # Configure server settings
-        server:
-          insecure: false
-          disable:
-            auth: false
-        
-        # Configure repo server with custom Helm v3.12.3 using official custom tooling
+        # Configure repo server with custom Helm v3.12.3
         repoServer:
-          # Custom tooling configuration
           volumes:
             - name: custom-tools
               emptyDir: {}
@@ -71,35 +37,10 @@ spec:
               mountPath: /usr/local/bin/helm
               subPath: helm
         
-        # Configure configmap settings
+        # Configure repositories
         configs:
           cm:
-            # Enable metrics
-            metrics.enabled: "true"
-            
-            # Configure admin user
-            admin.enabled: "true"
-            
-            # Enable application set controller
-            applicationSet.enabled: "true"
-            
-            # Configure resource tracking
-            resourceTrackingMethod: annotation
-            
-            # Enable RBAC
-            rbac.enabled: "true"
-            
-            # Configure notifications
-            notifications.enabled: "true"
-            
-            # Configure audit logging
-            audit.enabled: "true"
-            
-            # Configure server settings
-            server.insecure: "false"
-            server.disable.auth: "false"
-            
-            # Configure repositories
+            dex.enabled: "false"
             repositories: |
               - type: git
                 url: https://github.com/csz-devops/kind-argosy.git

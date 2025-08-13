@@ -1,17 +1,15 @@
 #!/bin/bash
+# Script to setup Kind cluster with Argo CD GitOps
 
 set -e
 
-echo "🚀 Setting up Kind cluster with Argo CD GitOps..."
-
-# Colors for output
+# Colors for nicer output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Function to print colored output
 print_status() {
     echo -e "${BLUE}[INFO]${NC} $1"
 }
@@ -69,8 +67,6 @@ wait_for_cluster() {
     print_success "Cluster is ready"
 }
 
-
-
 # Install Argo CD
 install_argocd() {
     print_status "Installing Argo CD..."
@@ -94,20 +90,16 @@ install_argocd() {
     print_success "Argo CD bootstrap installed and ready"
 }
 
-# Override Helm version in Argo CD repo server
-
-
 # Get Argo CD admin password
 get_admin_password() {
     print_status "Getting Argo CD admin password..."
-    
-    # Get the password directly (no need to wait for secret)
+
     ADMIN_PASSWORD=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d)
     
     echo
     print_success "Argo CD admin credentials:"
-    echo "   Username: admin"
-    echo "   Password: $ADMIN_PASSWORD"
+    echo "Username: admin"
+    echo "Password: $ADMIN_PASSWORD"
     echo
 }
 
@@ -115,22 +107,140 @@ get_admin_password() {
 apply_gitops() {
     print_status "Applying GitOps configuration..."
     
-    # Apply the root application that will manage everything
     kubectl apply -f gitops/apps/root-app.yaml
     
-    # Wait for the root app to be synced
-    print_status "Waiting for root application to sync..."
-    kubectl wait --for=condition=Available application/root-app -n argocd --timeout=300s
+    # print_status "Waiting for root application to sync..."
+    # kubectl wait --for=condition=Available application/root-app -n argocd --timeout=300s
     
     print_success "GitOps configuration applied"
 }
 
-# Setup Argo CD access
-setup_argocd_access() {
-    print_status "Setting up Argo CD access..."
+# Apply monitoring resources directly for testing
+apply_monitoring_direct() {
+    print_status "Applying monitoring resources directly for testing..."
     
-    print_success "Argo CD UI available at: https://localhost:8080"
-    print_warning "To access Argo CD, run: kubectl port-forward svc/argocd-server -n argocd 8080:443"
+    # Create monitoring namespace
+    kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
+    
+    # Apply Prometheus application first
+    print_status "Applying Prometheus stack..."
+    kubectl apply -f gitops/apps/monitoring/prometheus-app.yaml
+    
+    # Wait for Argo CD to sync the application
+    print_status "Waiting for Argo CD to sync Prometheus application..."
+    timeout=300
+    while [ $timeout -gt 0 ]; do
+        SYNC_STATUS=$(kubectl get application kube-prometheus-stack -n argocd -o jsonpath='{.status.sync.status}' 2>/dev/null || echo "Unknown")
+        if [ "$SYNC_STATUS" = "Synced" ]; then
+            print_success "Prometheus application synced successfully"
+            break
+        fi
+        print_status "Waiting for Prometheus application to sync... Status: $SYNC_STATUS ($timeout seconds remaining)"
+        sleep 10
+        timeout=$((timeout - 10))
+    done
+    
+    if [ $timeout -le 0 ]; then
+        print_warning "Prometheus application sync timeout, continuing anyway..."
+    fi
+    
+    # Wait for Prometheus Operator to be ready (this installs the CRDs)
+    print_status "Waiting for Prometheus Operator to be ready..."
+    timeout=300
+    while [ $timeout -gt 0 ]; do
+        if kubectl get deployment kube-prometheus-stack-operator -n monitoring &> /dev/null; then
+            print_success "Prometheus Operator deployment found"
+            break
+        fi
+        print_status "Waiting for Prometheus Operator deployment to appear... ($timeout seconds remaining)"
+        sleep 10
+        timeout=$((timeout - 10))
+    done
+    
+    if [ $timeout -le 0 ]; then
+        print_warning "Prometheus Operator deployment not found within timeout"
+        return
+    fi
+    
+    # Now wait for the deployment to be ready
+    kubectl wait --for=condition=Available deployment/kube-prometheus-stack-operator -n monitoring --timeout=300s
+    
+    # Wait a bit more for CRDs to be fully registered
+    sleep 10
+    
+    # Now apply ServiceMonitors (after CRDs are available)
+    print_status "Applying ServiceMonitors..."
+    kubectl apply -f gitops/apps/monitoring/argocd-servicemonitor.yaml
+    
+    # Apply AlertRules
+    print_status "Applying AlertRules..."
+    kubectl apply -f gitops/apps/monitoring/argocd-alerts.yaml
+    
+    print_success "Monitoring resources applied directly"
+}
+
+# Setup port forwarding for all services
+setup_port_forwarding() {
+    print_status "Setting up port forwarding for all services..."
+    
+    # Kill any existing port-forward processes
+    pkill -f "kubectl port-forward" || true
+    sleep 2
+    
+    # Start Argo CD port forwarding
+    print_status "Starting Argo CD port forwarding..."
+    kubectl port-forward svc/argocd-server -n argocd 8080:443 &
+    ARGOCD_PID=$!
+    
+    # Wait for Argo CD port forwarding to establish
+    sleep 3
+    
+    print_success "Argo CD UI: https://localhost:8080"
+    
+    # Wait for monitoring namespace to be created (should be immediate since we applied directly)
+    print_status "Checking monitoring namespace..."
+    if kubectl get namespace monitoring &> /dev/null; then
+        print_success "Monitoring namespace exists"
+    else
+        print_warning "Monitoring namespace not found"
+        return
+    fi
+    
+    # Wait for monitoring services to be ready
+    print_status "Waiting for monitoring services to be ready..."
+    kubectl wait --for=condition=Available deployment/kube-prometheus-stack-prometheus -n monitoring --timeout=300s 2>/dev/null || print_warning "Prometheus not ready, port forwarding may fail"
+    kubectl wait --for=condition=Available deployment/kube-prometheus-stack-grafana -n monitoring --timeout=300s 2>/dev/null || print_warning "Grafana not ready, port forwarding may fail"
+    kubectl wait --for=condition=Available deployment/kube-prometheus-stack-alertmanager -n monitoring --timeout=300s 2>/dev/null || print_warning "AlertManager not ready, port forwarding may fail"
+    
+    # Start monitoring port forwarding
+    print_status "Starting monitoring port forwarding..."
+    
+    # Start Prometheus port forwarding
+    kubectl port-forward svc/kube-prometheus-stack-prometheus -n monitoring 30000:9090 &
+    PROMETHEUS_PID=$!
+    
+    # Start Grafana port forwarding
+    kubectl port-forward svc/kube-prometheus-stack-grafana -n monitoring 31000:80 &
+    GRAFANA_PID=$!
+    
+    # Start AlertManager port forwarding
+    kubectl port-forward svc/kube-prometheus-stack-alertmanager -n monitoring 32000:9093 &
+    ALERTMANAGER_PID=$!
+    
+    # Wait for port forwarding to establish
+    sleep 5
+    
+    print_success "All services are now accessible:"
+    print_success "Argo CD UI: https://localhost:8080"
+    print_success "Prometheus: http://localhost:30000"
+    print_success "Grafana: http://localhost:31000 (admin/admin123)"
+    print_success "AlertManager: http://localhost:32000"
+    
+    # Store PIDs for cleanup
+    echo $ARGOCD_PID > /tmp/argocd-pf.pid
+    echo $PROMETHEUS_PID > /tmp/prometheus-pf.pid
+    echo $GRAFANA_PID > /tmp/grafana-pf.pid
+    echo $ALERTMANAGER_PID > /tmp/alertmanager-pf.pid
 }
 
 # Verify setup
@@ -155,6 +265,14 @@ verify_setup() {
         print_warning "Root application status: $ROOT_APP_STATUS"
     fi
     
+    # Ensure monitoring script is executable
+    if [ -f "scripts/monitoring-port-forwarding.sh" ]; then
+        chmod +x scripts/monitoring-port-forwarding.sh
+        print_success "Monitoring port-forwarding script is ready"
+    else
+        print_warning "Monitoring port-forwarding script not found"
+    fi
+    
     print_success "Setup verification complete"
 }
 
@@ -170,29 +288,28 @@ main() {
     install_argocd
     get_admin_password
     apply_gitops
-    setup_argocd_access
+    apply_monitoring_direct
     verify_setup
+    setup_port_forwarding
     
     echo
-    echo "🎉 Setup complete!"
-    echo "=================="
+    echo "Setup complete!"
+    echo "==============="
     echo
-    echo "📋 Next steps:"
-    echo "   1. Access Argo CD UI: kubectl port-forward svc/argocd-server -n argocd 8080:443"
-    echo "   2. Login with admin / $ADMIN_PASSWORD"
-    echo "   3. Check the 'root-app' application"
-    echo "   4. Monitor the sync status of all applications"
+    echo "All services are now accessible:"
+    echo "- Argo CD UI: https://localhost:8080 (admin / $ADMIN_PASSWORD)"
+    echo "- Prometheus: http://localhost:30000"
+    echo "- Grafana: http://localhost:31000 (admin/admin123)"
+    echo "- AlertManager: http://localhost:32000"
     echo
-    echo "🔧 Features enabled:"
-    echo "   ✅ Argo CD self-management"
-    echo "   ✅ Custom Helm version (3.12.3)"
-    echo "   ✅ Prometheus monitoring with dashboards"
-    echo "   ✅ Comprehensive alerts"
+    echo "Features enabled:"
+    echo "- Argo CD self-management"
+    echo "- Custom Helm version (3.12.3)"
+    echo "- Prometheus monitoring with dashboards"
+    echo "- ArgoCD status alerts"
     echo
-    echo "📊 Monitoring (NodePort access):"
-    echo "   - Prometheus: http://localhost:30000"
-    echo "   - Grafana: http://localhost:31000 (admin/admin123)"
-    echo "   - AlertManager: http://localhost:32000"
+    echo "Port forwarding is running in the background."
+    echo "To stop port forwarding: pkill -f 'kubectl port-forward'"
     echo
 }
 
