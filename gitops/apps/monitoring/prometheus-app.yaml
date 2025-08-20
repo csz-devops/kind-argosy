@@ -41,9 +41,9 @@ spec:
 
   syncPolicy:
     automated:
-      prune: true
-      selfHeal: true
-      allowEmpty: true
+      prune: false
+      selfHeal: false
+      allowEmpty: false
     retry:
       limit: 10
       backoff:

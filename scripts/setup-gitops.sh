@@ -76,7 +76,11 @@ install_argocd() {
     
     # Install Argo CD using the official install manifest (minimal bootstrap)
     print_status "Installing Argo CD bootstrap..."
-    kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+    # kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+    helm repo add argo-cd https://argoproj.github.io/argo-helm
+    helm repo update
+    helm install argocd argo-cd/argo-cd --namespace argocd --create-namespace --version 8.2.7
+    
     
     # Wait for Argo CD to be ready
     print_status "Waiting for Argo CD to be ready..."
